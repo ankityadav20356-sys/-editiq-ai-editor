@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://editiq-ai-editor/schema/patch.schema.json",
+  "title": "EditIQ Patch",
+  "description": "Small deterministic changes applied to an existing EditIQ edit plan or style profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "patch"
+  ],
+  "properties": {
+    "patch": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": true
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}
