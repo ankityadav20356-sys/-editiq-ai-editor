@@ -1,7 +1,0 @@
-opencv-python
-numpy
-Pillow
-ffmpeg-python
-faster-whisper
-pydantic
-jsonschema
