@@ -1,10 +1,15 @@
 import argparse
 import json
 import os
+from collections import Counter
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+
+VIDEO_WIDTH = 1080
+VIDEO_HEIGHT = 1920
 
 
 def clamp(value, minimum, maximum):
@@ -14,14 +19,26 @@ def clamp(value, minimum, maximum):
 def normalize(value, maximum):
     if maximum <= 0:
         return 0.0
-    return round(float(value) / float(maximum), 4)
+
+    return round(
+        float(value) / float(maximum),
+        4
+    )
 
 
-def sample_frames(cap, frame_count, fps, sample_count=24):
+def sample_frames(
+    cap,
+    frame_count,
+    fps,
+    sample_count=24
+):
     if frame_count <= 0:
         return []
 
-    count = min(sample_count, frame_count)
+    count = min(
+        sample_count,
+        frame_count
+    )
 
     if count == 1:
         positions = [0]
@@ -36,51 +53,76 @@ def sample_frames(cap, frame_count, fps, sample_count=24):
     samples = []
 
     for frame_number in positions:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_number))
+
+        cap.set(
+            cv2.CAP_PROP_POS_FRAMES,
+            int(frame_number)
+        )
 
         success, frame = cap.read()
 
         if not success or frame is None:
             continue
 
-        samples.append({
-            "frame_number": int(frame_number),
-            "time_seconds": round(
-                frame_number / fps,
-                3
-            ) if fps > 0 else 0,
-            "frame": frame
-        })
+        samples.append(
+            {
+                "frame_number": int(
+                    frame_number
+                ),
+                "time_seconds": round(
+                    frame_number / fps,
+                    3
+                ) if fps > 0 else 0,
+                "frame": frame
+            }
+        )
 
     return samples
 
 
-def detect_bright_caption_region(frame):
+def detect_caption_region(frame):
     """
-    Detect likely caption pixels.
+    Detect bright, text-like caption regions.
 
-    This is intentionally conservative.
-    We look for bright, relatively low-saturation pixels,
-    which commonly represent white/silver captions.
+    This is a visual-estimation stage.
+    Exact font identification is intentionally
+    left for a future OCR/font-matching module.
     """
 
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(
+        frame,
+        cv2.COLOR_BGR2HSV
+    )
 
-    # Bright + relatively low saturation.
     mask = cv2.inRange(
         hsv,
-        np.array([0, 0, 150], dtype=np.uint8),
-        np.array([180, 110, 255], dtype=np.uint8)
+        np.array(
+            [0, 0, 150],
+            dtype=np.uint8
+        ),
+        np.array(
+            [180, 120, 255],
+            dtype=np.uint8
+        )
     )
 
     height, width = mask.shape
 
-    # Captions are commonly located in the lower/middle
-    # portion of vertical social videos.
-    y_start = int(height * 0.35)
-    roi = mask[y_start:, :]
+    # Ignore the top area where UI/background
+    # elements are more likely to create noise.
+    y_start = int(
+        height * 0.30
+    )
 
-    kernel = np.ones((3, 3), np.uint8)
+    roi = mask[
+        y_start:,
+        :
+    ]
+
+    kernel = np.ones(
+        (3, 3),
+        np.uint8
+    )
 
     roi = cv2.morphologyEx(
         roi,
@@ -103,7 +145,10 @@ def detect_bright_caption_region(frame):
     candidates = []
 
     for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
+
+        x, y, w, h = cv2.boundingRect(
+            contour
+        )
 
         y += y_start
 
@@ -112,142 +157,433 @@ def detect_bright_caption_region(frame):
         if area < width * height * 0.00005:
             continue
 
-        if w < width * 0.05:
+        if w < width * 0.04:
             continue
 
-        if h > height * 0.25:
+        if h > height * 0.20:
+            continue
+
+        aspect_ratio = (
+            w / max(h, 1)
+        )
+
+        if aspect_ratio < 1.2:
             continue
 
         candidates.append(
-            (area, x, y, w, h)
+            {
+                "area": area,
+                "x": x,
+                "y": y,
+                "width": w,
+                "height": h,
+                "aspect_ratio": aspect_ratio
+            }
         )
 
     if not candidates:
         return None
 
-    # Prefer wide horizontal text-like regions.
     candidates.sort(
         key=lambda item: (
-            item[3] / max(item[4], 1),
-            item[0]
+            item["aspect_ratio"],
+            item["area"]
         ),
         reverse=True
     )
 
-    _, x, y, w, h = candidates[0]
+    best = candidates[0]
 
     return {
-        "x": x,
-        "y": y,
-        "width": w,
-        "height": h
+        "x": best["x"],
+        "y": best["y"],
+        "width": best["width"],
+        "height": best["height"]
     }
 
 
-def estimate_caption_color(frame, region):
+def estimate_caption_color(
+    frame,
+    region
+):
     if not region:
         return "#FFFFFF", 0.0
 
     x = region["x"]
     y = region["y"]
-    w = region["width"]
-    h = region["height"]
+    width = region["width"]
+    height = region["height"]
 
     crop = frame[
-        y:y + h,
-        x:x + w
+        y:y + height,
+        x:x + width
     ]
 
     if crop.size == 0:
         return "#FFFFFF", 0.0
 
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-
-    # Bright pixels are more likely to belong to text.
-    mask = cv2.inRange(
-        hsv,
-        np.array([0, 0, 150], dtype=np.uint8),
-        np.array([180, 180, 255], dtype=np.uint8)
+    hsv = cv2.cvtColor(
+        crop,
+        cv2.COLOR_BGR2HSV
     )
 
-    pixels = crop[mask > 0]
+    bright_mask = cv2.inRange(
+        hsv,
+        np.array(
+            [0, 0, 150],
+            dtype=np.uint8
+        ),
+        np.array(
+            [180, 180, 255],
+            dtype=np.uint8
+        )
+    )
+
+    pixels = crop[
+        bright_mask > 0
+    ]
 
     if len(pixels) < 10:
-        return "#FFFFFF", 0.1
+        return "#FFFFFF", 0.05
 
-    # Remove very dark/irrelevant pixels.
     mean_bgr = np.mean(
         pixels,
         axis=0
     )
 
     b, g, r = [
-        int(clamp(round(v), 0, 255))
-        for v in mean_bgr
+        int(
+            clamp(
+                round(value),
+                0,
+                255
+            )
+        )
+        for value in mean_bgr
     ]
 
-    color = "#{:02X}{:02X}{:02X}".format(
-        r,
-        g,
-        b
+    color = (
+        "#{:02X}{:02X}{:02X}"
+        .format(
+            r,
+            g,
+            b
+        )
     )
 
     confidence = clamp(
-        len(pixels) / max(crop.shape[0] * crop.shape[1], 1),
+        len(pixels)
+        /
+        max(
+            crop.shape[0]
+            * crop.shape[1],
+            1
+        ),
         0.0,
         1.0
     )
 
-    return color, round(float(confidence), 3)
+    return (
+        color,
+        round(
+            float(confidence),
+            3
+        )
+    )
 
 
-def estimate_position(region, width, height):
+def estimate_position(
+    region,
+    width,
+    height
+):
     if not region:
         return {
-            "mode": "reference",
             "x": 0.5,
-            "y": 0.5,
-            "width": 0.0,
-            "height": 0.0
+            "y": 0.55
         }
 
     center_x = (
-        region["x"] +
+        region["x"]
+        +
         region["width"] / 2
     )
 
     center_y = (
-        region["y"] +
+        region["y"]
+        +
         region["height"] / 2
     )
 
     return {
-        "mode": "reference",
-        "x": normalize(center_x, width),
-        "y": normalize(center_y, height),
-        "width": normalize(region["width"], width),
-        "height": normalize(region["height"], height)
+        "x": normalize(
+            center_x,
+            width
+        ),
+        "y": normalize(
+            center_y,
+            height
+        )
     }
 
 
-def analyze_animation(regions, fps):
-    """
-    Estimate whether the detected caption region changes
-    substantially between sampled frames.
+def estimate_alignment(
+    region,
+    frame_width
+):
+    if not region:
+        return "center"
 
-    This is a basic signal, not a full motion-tracking system.
+    center_x = (
+        region["x"]
+        +
+        region["width"] / 2
+    )
+
+    normalized = (
+        center_x
+        /
+        max(frame_width, 1)
+    )
+
+    if normalized < 0.38:
+        return "left"
+
+    if normalized > 0.62:
+        return "right"
+
+    return "center"
+
+
+def estimate_font_size(
+    region
+):
+    if not region:
+        return 56
+
+    text_height = max(
+        region["height"],
+        1
+    )
+
+    # Approximate caption size from
+    # detected pixel height.
+    estimated = (
+        text_height * 1.65
+    )
+
+    return round(
+        clamp(
+            estimated,
+            20,
+            180
+        ),
+        1
+    )
+
+
+def estimate_word_capacity(
+    region,
+    frame_width
+):
+    if not region:
+        return 7
+
+    width_ratio = (
+        region["width"]
+        /
+        max(frame_width, 1)
+    )
+
+    if width_ratio < 0.30:
+        return 4
+
+    if width_ratio < 0.50:
+        return 6
+
+    if width_ratio < 0.70:
+        return 8
+
+    return 10
+
+
+def estimate_effects(
+    frame,
+    region,
+    fill_color
+):
+    """
+    Estimate stroke/shadow/glow conservatively.
+
+    We only enable an effect when the pixels around
+    the detected text region provide some evidence.
     """
 
+    result = {
+        "stroke": {
+            "enabled": False,
+            "width_px": 0,
+            "color": "#000000",
+            "opacity": 0.0
+        },
+        "shadow": {
+            "enabled": False,
+            "opacity": 0.0,
+            "blur_px": 0.0,
+            "offset_x": 0.0,
+            "offset_y": 0.0,
+            "color": "#000000"
+        },
+        "glow": {
+            "enabled": False,
+            "blur_px": 0.0,
+            "opacity": 0.0,
+            "color": fill_color
+        }
+    }
+
+    if not region:
+        return result
+
+    x = region["x"]
+    y = region["y"]
+    width = region["width"]
+    height = region["height"]
+
+    padding = max(
+        4,
+        int(
+            min(
+                width,
+                height
+            ) * 0.12
+        )
+    )
+
+    x1 = max(
+        0,
+        x - padding
+    )
+
+    y1 = max(
+        0,
+        y - padding
+    )
+
+    x2 = min(
+        frame.shape[1],
+        x + width + padding
+    )
+
+    y2 = min(
+        frame.shape[0],
+        y + height + padding
+    )
+
+    expanded = frame[
+        y1:y2,
+        x1:x2
+    ]
+
+    if expanded.size == 0:
+        return result
+
+    hsv = cv2.cvtColor(
+        expanded,
+        cv2.COLOR_BGR2HSV
+    )
+
+    # Strong low-saturation bright areas are usually
+    # the actual caption body.
+    bright = cv2.inRange(
+        hsv,
+        np.array(
+            [0, 0, 175],
+            dtype=np.uint8
+        ),
+        np.array(
+            [180, 100, 255],
+            dtype=np.uint8
+        )
+    )
+
+    caption_ratio = (
+        np.count_nonzero(bright)
+        /
+        max(
+            bright.shape[0]
+            * bright.shape[1],
+            1
+        )
+    )
+
+    # Very rough evidence for an outline/shadow
+    # around bright text.
+    dark = cv2.inRange(
+        hsv,
+        np.array(
+            [0, 0, 0],
+            dtype=np.uint8
+        ),
+        np.array(
+            [180, 255, 90],
+            dtype=np.uint8
+        )
+    )
+
+    dark_ratio = (
+        np.count_nonzero(dark)
+        /
+        max(
+            dark.shape[0]
+            * dark.shape[1],
+            1
+        )
+    )
+
+    if (
+        caption_ratio > 0.01
+        and dark_ratio > 0.20
+    ):
+        result["stroke"] = {
+            "enabled": True,
+            "width_px": 1.5,
+            "color": "#000000",
+            "opacity": 0.55
+        }
+
+    if (
+        caption_ratio > 0.01
+        and dark_ratio > 0.35
+    ):
+        result["shadow"] = {
+            "enabled": True,
+            "opacity": 0.35,
+            "blur_px": 2,
+            "offset_x": 2,
+            "offset_y": 2,
+            "color": "#000000"
+        }
+
+    return result
+
+
+def analyze_animation(
+    regions,
+    fps
+):
     valid = [
-        r for r in regions
-        if r is not None
+        region
+        for region in regions
+        if region is not None
     ]
 
     if len(valid) < 3:
         return {
             "type": "none",
             "duration_ms": 0,
-            "strength": 0.0
+            "easing": "linear",
+            "intensity": 0.0
         }
 
     centers = []
@@ -255,35 +591,58 @@ def analyze_animation(regions, fps):
     for region in valid:
         centers.append(
             (
-                region["x"] + region["width"] / 2,
-                region["y"] + region["height"] / 2
+                region["x"]
+                +
+                region["width"] / 2,
+                region["y"]
+                +
+                region["height"] / 2
             )
         )
 
     movement = []
 
-    for i in range(1, len(centers)):
-        dx = centers[i][0] - centers[i - 1][0]
-        dy = centers[i][1] - centers[i - 1][1]
+    for index in range(
+        1,
+        len(centers)
+    ):
+        dx = (
+            centers[index][0]
+            -
+            centers[index - 1][0]
+        )
+
+        dy = (
+            centers[index][1]
+            -
+            centers[index - 1][1]
+        )
 
         movement.append(
-            float(np.sqrt(dx * dx + dy * dy))
+            float(
+                np.sqrt(
+                    dx * dx
+                    +
+                    dy * dy
+                )
+            )
         )
 
     if not movement:
         return {
             "type": "none",
             "duration_ms": 0,
-            "strength": 0.0
+            "easing": "linear",
+            "intensity": 0.0
         }
 
     average_movement = float(
         np.mean(movement)
     )
 
-    if average_movement < 8:
+    if average_movement < 5:
         animation_type = "none"
-    elif average_movement < 25:
+    elif average_movement < 15:
         animation_type = "subtle_motion"
     else:
         animation_type = "motion"
@@ -297,7 +656,7 @@ def analyze_animation(regions, fps):
         else 0
     )
 
-    strength = clamp(
+    intensity = clamp(
         average_movement / 50.0,
         0.0,
         1.0
@@ -306,44 +665,59 @@ def analyze_animation(regions, fps):
     return {
         "type": animation_type,
         "duration_ms": duration_ms,
-        "strength": round(strength, 3)
+        "easing": "linear",
+        "intensity": round(
+            float(intensity),
+            3
+        )
     }
 
 
-def analyze_video(video_path: str, mode="FAST") -> dict:
-
-    if not os.path.isfile(video_path):
+def analyze_video(
+    video_path: str,
+    mode="FAST"
+):
+    if not os.path.isfile(
+        video_path
+    ):
         raise FileNotFoundError(
             f"Video not found: {video_path}"
         )
 
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(
+        video_path
+    )
 
     if not cap.isOpened():
         raise RuntimeError(
             f"Unable to open video: {video_path}"
         )
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = cap.get(
+        cv2.CAP_PROP_FPS
+    )
+
     frame_count = int(
-        cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        cap.get(
+            cv2.CAP_PROP_FRAME_COUNT
+        )
     )
+
     width = int(
-        cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        cap.get(
+            cv2.CAP_PROP_FRAME_WIDTH
+        )
     )
+
     height = int(
-        cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        cap.get(
+            cv2.CAP_PROP_FRAME_HEIGHT
+        )
     )
 
     duration = (
         frame_count / fps
         if fps > 0
-        else 0
-    )
-
-    aspect_ratio = (
-        width / height
-        if height > 0
         else 0
     )
 
@@ -360,48 +734,39 @@ def analyze_video(video_path: str, mode="FAST") -> dict:
         sample_count
     )
 
-    regions = []
-    colors = []
+    cap.release()
 
-    frame_metadata = []
+    regions = []
+    detected_colors = []
+    color_confidences = []
 
     for sample in samples:
 
         frame = sample["frame"]
 
-        region = detect_bright_caption_region(
+        region = detect_caption_region(
             frame
         )
 
-        regions.append(region)
+        regions.append(
+            region
+        )
 
-        color, color_confidence = (
+        color, confidence = (
             estimate_caption_color(
                 frame,
                 region
             )
         )
 
-        colors.append(
-            (
-                color,
-                color_confidence
+        if confidence >= 0.05:
+            detected_colors.append(
+                color
             )
+
+        color_confidences.append(
+            confidence
         )
-
-        frame_metadata.append({
-            "frame_number": sample[
-                "frame_number"
-            ],
-            "time_seconds": sample[
-                "time_seconds"
-            ],
-            "caption_detected": (
-                region is not None
-            )
-        })
-
-    cap.release()
 
     valid_regions = [
         region
@@ -413,59 +778,76 @@ def analyze_video(video_path: str, mode="FAST") -> dict:
 
         average_region = {
             "x": int(
-                np.mean([
-                    r["x"]
-                    for r in valid_regions
-                ])
+                np.mean(
+                    [
+                        region["x"]
+                        for region in valid_regions
+                    ]
+                )
             ),
             "y": int(
-                np.mean([
-                    r["y"]
-                    for r in valid_regions
-                ])
+                np.mean(
+                    [
+                        region["y"]
+                        for region in valid_regions
+                    ]
+                )
             ),
             "width": int(
-                np.mean([
-                    r["width"]
-                    for r in valid_regions
-                ])
+                np.mean(
+                    [
+                        region["width"]
+                        for region in valid_regions
+                    ]
+                )
             ),
             "height": int(
-                np.mean([
-                    r["height"]
-                    for r in valid_regions
-                ])
+                np.mean(
+                    [
+                        region["height"]
+                        for region in valid_regions
+                    ]
+                )
             )
         }
 
     else:
-
         average_region = None
 
-    # Most frequently detected color.
-    detected_colors = [
-        color
-        for color, confidence in colors
-        if confidence > 0.05
-    ]
-
     if detected_colors:
-        unique, counts = np.unique(
-            detected_colors,
-            return_counts=True
-        )
-
-        fill = str(
-            unique[
-                int(np.argmax(counts))
-            ]
-        )
+        fill = Counter(
+            detected_colors
+        ).most_common(1)[0][0]
     else:
         fill = "#FFFFFF"
 
-    detection_confidence = (
-        len(valid_regions) /
-        max(len(samples), 1)
+    detection_rate = (
+        len(valid_regions)
+        /
+        max(
+            len(samples),
+            1
+        )
+    )
+
+    mean_color_confidence = (
+        float(
+            np.mean(
+                color_confidences
+            )
+        )
+        if color_confidences
+        else 0.0
+    )
+
+    caption_confidence = clamp(
+        (
+            detection_rate * 0.70
+            +
+            mean_color_confidence * 0.30
+        ),
+        0.0,
+        1.0
     )
 
     position = estimate_position(
@@ -474,102 +856,128 @@ def analyze_video(video_path: str, mode="FAST") -> dict:
         height
     )
 
+    alignment = estimate_alignment(
+        average_region,
+        width
+    )
+
+    font_size = estimate_font_size(
+        average_region
+    )
+
+    max_words = estimate_word_capacity(
+        average_region,
+        width
+    )
+
+    effects = (
+        estimate_effects(
+            samples[0]["frame"],
+            average_region,
+            fill
+        )
+        if samples and average_region
+        else {
+            "stroke": {
+                "enabled": False,
+                "width_px": 0,
+                "color": "#000000",
+                "opacity": 0.0
+            },
+            "shadow": {
+                "enabled": False,
+                "opacity": 0.0,
+                "blur_px": 0.0,
+                "offset_x": 0.0,
+                "offset_y": 0.0,
+                "color": "#000000"
+            },
+            "glow": {
+                "enabled": False,
+                "blur_px": 0.0,
+                "opacity": 0.0,
+                "color": fill
+            }
+        }
+    )
+
     animation = analyze_animation(
         regions,
         fps
     )
 
+    # Use normalized position as the
+    # reference location, while margins
+    # remain compatible with the renderer.
+    margin_left = round(
+        position["x"] * width
+    )
+
+    margin_right = round(
+        width
+        -
+        position["x"] * width
+    )
+
+    margin_vertical = round(
+        height
+        -
+        position["y"] * height
+    )
+
     style_profile = {
-
+        "style_id": "reference_caption_style",
         "version": 2,
-
-        "video": {
-            "width": width,
-            "height": height,
-            "fps": round(fps, 3),
-            "frame_count": frame_count,
-            "duration_seconds": round(
-                duration,
-                3
-            ),
-            "aspect_ratio": round(
-                aspect_ratio,
-                4
-            )
-        },
-
-        "analysis": {
-            "mode": mode.upper(),
-            "sample_count": len(samples),
-            "caption_detection_rate": round(
-                detection_confidence,
-                3
-            ),
-            "samples": frame_metadata
-        },
-
+        "confidence": round(
+            caption_confidence,
+            3
+        ),
         "caption": {
-
             "font_family": "",
-
             "font_weight": 700,
-
-            "size_px": (
-                average_region["height"]
-                if average_region
-                else 0
-            ),
-
+            "size_px": font_size,
             "fill": fill,
-
             "highlight": fill,
-
-            "position": position,
-
-            "shadow": {
-                "enabled": False,
-                "color": "#000000",
-                "opacity": 0,
-                "offset_x": 0,
-                "offset_y": 0,
-                "blur": 0
+            "opacity": 1.0,
+            "letter_spacing": 0,
+            "line_height": 1.0,
+            "alignment": alignment,
+            "max_words_per_line": max_words,
+            "margin_left": margin_left,
+            "margin_right": margin_right,
+            "margin_vertical": margin_vertical,
+            "position": {
+                "x": margin_left,
+                "y": margin_vertical
             },
-
-            "stroke": {
-                "enabled": False,
-                "color": "#000000",
-                "width": 0,
-                "opacity": 0
+            "safe_area": {
+                "top": 120,
+                "bottom": 160,
+                "left": 80,
+                "right": 80
             },
-
-            "glow": {
-                "enabled": False,
-                "color": fill,
-                "opacity": 0,
-                "radius": 0
-            },
-
+            "stroke": effects["stroke"],
+            "shadow": effects["shadow"],
+            "glow": effects["glow"],
             "animation": animation
         },
-
-        "confidence": {
-
-            "video": 1.0,
-
-            "caption": round(
-                detection_confidence,
-                3
-            ),
-
-            "position": round(
-                detection_confidence,
-                3
-            ),
-
-            "color": round(
-                detection_confidence,
-                3
-            )
+        "color": {
+            "exposure": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "temperature": 0,
+            "tint": 0
+        },
+        "audio": {
+            "noise_reduction": False,
+            "eq": False,
+            "compression": False,
+            "loudness_target_lufs": -14
+        },
+        "motion": {
+            "default_transition": "none",
+            "default_easing": animation["easing"],
+            "default_zoom_strength": 0
         }
     }
 
@@ -580,7 +988,8 @@ def main():
 
     parser = argparse.ArgumentParser(
         description=(
-            "EditIQ V1 reference video analyzer"
+            "EditIQ reference caption "
+            "style analyzer V2"
         )
     )
 
