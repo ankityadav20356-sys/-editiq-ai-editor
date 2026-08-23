@@ -87,6 +87,18 @@
           "type": "integer",
           "minimum": 1
         },
+        "margin_left": {
+          "type": "number",
+          "minimum": 0
+        },
+        "margin_right": {
+          "type": "number",
+          "minimum": 0
+        },
+        "margin_vertical": {
+          "type": "number",
+          "minimum": 0
+        },
         "position": {
           "$ref": "#/$defs/position"
         },
@@ -303,4 +315,4 @@
       }
     }
   }
-      }
+    }
