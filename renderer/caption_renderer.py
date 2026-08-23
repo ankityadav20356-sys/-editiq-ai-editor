@@ -29,64 +29,45 @@ def seconds_to_ass(seconds):
     minutes = int((seconds % 3600) // 60)
     remaining = seconds % 60
 
-    return (
-        f"{hours}:"
-        f"{minutes:02d}:"
-        f"{remaining:05.2f}"
-    )
+    return f"{hours}:{minutes:02d}:{remaining:05.2f}"
+
+
+def get_caption_style(style):
+    caption = style.get("caption", {})
+
+    return {
+        "font": caption.get("font_family", "Arial"),
+        "size": caption.get("size_px", 56),
+        "weight": caption.get("font_weight", 700),
+        "fill": caption.get("fill", "#FFFFFF"),
+        "highlight": caption.get("highlight", "#FFFFFF"),
+        "opacity": caption.get("opacity", 100),
+        "spacing": caption.get("letter_spacing", 0),
+        "alignment": caption.get("alignment", 5),
+        "margin_left": caption.get("margin_left", 80),
+        "margin_right": caption.get("margin_right", 80),
+        "margin_vertical": caption.get("margin_vertical", 80),
+        "stroke": caption.get("stroke", {}),
+        "shadow": caption.get("shadow", {}),
+        "glow": caption.get("glow", {}),
+    }
 
 
 def create_ass_style(style):
-    caption = style.get("caption", {})
+    caption = get_caption_style(style)
 
-    font = caption.get(
-        "font_family",
-        "Arial"
-    )
+    font = caption["font"]
+    size = caption["size"]
+    weight = caption["weight"]
 
-    size = caption.get(
-        "size_px",
-        56
-    )
+    fill = hex_to_ass_color(caption["fill"])
+    highlight = hex_to_ass_color(caption["highlight"])
 
-    weight = caption.get(
-        "font_weight",
-        700
-    )
+    stroke = caption["stroke"]
+    shadow = caption["shadow"]
 
-    fill = hex_to_ass_color(
-        caption.get(
-            "fill",
-            "#FFFFFF"
-        )
-    )
-
-    highlight = hex_to_ass_color(
-        caption.get(
-            "highlight",
-            "#FFFFFF"
-        )
-    )
-
-    shadow = caption.get(
-        "shadow",
-        {}
-    )
-
-    stroke = caption.get(
-        "stroke",
-        {}
-    )
-
-    shadow_enabled = shadow.get(
-        "enabled",
-        False
-    )
-
-    stroke_enabled = stroke.get(
-        "enabled",
-        False
-    )
+    stroke_enabled = stroke.get("enabled", False)
+    shadow_enabled = shadow.get("enabled", False)
 
     outline = (
         stroke.get("width", 0)
@@ -95,12 +76,18 @@ def create_ass_style(style):
     )
 
     shadow_size = (
-        2
+        shadow.get("size", 2)
         if shadow_enabled
         else 0
     )
 
     bold = -1 if weight >= 600 else 0
+
+    alignment = caption["alignment"]
+
+    margin_left = caption["margin_left"]
+    margin_right = caption["margin_right"]
+    margin_vertical = caption["margin_vertical"]
 
     return f"""[Script Info]
 ScriptType: v4.00+
@@ -110,15 +97,34 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: EditIQ,{font},{size},{fill},{highlight},&H00000000,&H80000000,{bold},0,0,0,100,100,0,0,1,{outline},{shadow_size},5,80,80,80,1
+Style: EditIQ,{font},{size},{fill},{highlight},&H00000000,&H80000000,{bold},0,0,0,100,100,{caption["spacing"]},0,1,{outline},{shadow_size},{alignment},{margin_left},{margin_right},{margin_vertical},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 
-def build_events(captions):
+def escape_ass_text(text):
+    text = text.replace("\\", r"\\")
+    text = text.replace("{", r"\{")
+    text = text.replace("}", r"\}")
+    text = text.replace("\n", r"\N")
+
+    return text
+
+
+def build_events(captions, style):
     events = []
+
+    caption_style = get_caption_style(style)
+
+    primary_color = hex_to_ass_color(
+        caption_style["fill"]
+    )
+
+    highlight_color = hex_to_ass_color(
+        caption_style["highlight"]
+    )
 
     for caption in captions:
 
@@ -138,10 +144,41 @@ def build_events(captions):
         if not text:
             continue
 
-        text = text.replace(
-            "\n",
-            r"\N"
-        )
+        words = caption.get("words")
+
+        if words:
+            rendered_words = []
+
+            for word in words:
+
+                word_text = escape_ass_text(
+                    str(word.get("text", ""))
+                )
+
+                highlighted = word.get(
+                    "highlight",
+                    False
+                )
+
+                if highlighted:
+                    rendered_words.append(
+                        "{\\c" +
+                        highlight_color +
+                        "}" +
+                        word_text +
+                        "{\\c" +
+                        primary_color +
+                        "}"
+                    )
+                else:
+                    rendered_words.append(
+                        word_text
+                    )
+
+            text = " ".join(rendered_words)
+
+        else:
+            text = escape_ass_text(text)
 
         events.append(
             "Dialogue: "
@@ -164,7 +201,8 @@ def create_ass_file(
     )
 
     ass_content += build_events(
-        captions
+        captions,
+        style_profile
     )
 
     Path(output_path).write_text(
@@ -226,7 +264,7 @@ def render_video(
         )
 
     print(
-        "EditIQ: Render complete → "
+        "EditIQ: Caption render complete → "
         f"{output_video}"
     )
 
@@ -234,7 +272,7 @@ def render_video(
 def main():
 
     parser = argparse.ArgumentParser(
-        description="EditIQ caption renderer"
+        description="EditIQ deterministic caption renderer"
     )
 
     parser.add_argument(
