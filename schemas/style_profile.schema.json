@@ -116,6 +116,43 @@
         },
         "animation": {
           "$ref": "#/$defs/animation"
+        },
+        "word_styles": {
+          "description": "Named word-level style overrides. A caption word may reference one of these names via its own 'style' field. SUPPORTED NOW by renderer/caption_renderer.py: fill, scale, font_weight. 'animation' on a word_style is schema-ready but not yet rendered per-word (only the caption-level animation is currently used).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/word_style"
+          }
+        },
+        "phrase_styles": {
+          "description": "Named phrase-level (multi-word run) style overrides. SCHEMA-READY BUT NOT YET RENDERED \u2014 reserved for a future renderer capability. Present so profiles can be authored/validated ahead of renderer support without breaking anything.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/word_style"
+          }
+        }
+      }
+    },
+    "word_style": {
+      "description": "A single named style override applicable to a word (now) or a phrase (schema-ready). All fields optional; unspecified fields fall back to the caption's base style.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "font_weight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 1000
+        },
+        "animation": {
+          "$ref": "#/$defs/animation"
         }
       }
     },
@@ -315,4 +352,4 @@
       }
     }
   }
-        
+}

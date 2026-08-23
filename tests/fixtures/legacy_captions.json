@@ -1,0 +1,17 @@
+{
+  "captions": [
+    {
+      "start": 0.0,
+      "end": 2.0,
+      "words": [
+        {"text": "hello"},
+        {"text": "world", "highlight": true}
+      ]
+    },
+    {
+      "start": 2.0,
+      "end": 3.0,
+      "text": "plain caption without word list"
+    }
+  ]
+}

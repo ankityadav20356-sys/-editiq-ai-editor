@@ -1,0 +1,74 @@
+{
+  "style_id": "reference_caption_style",
+  "version": 2,
+  "confidence": 0.72,
+  "caption": {
+    "font_family": "",
+    "font_weight": 700,
+    "size_px": 58.5,
+    "fill": "#F2F2F2",
+    "highlight": "#F2F2F2",
+    "opacity": 1.0,
+    "letter_spacing": 0,
+    "line_height": 1.0,
+    "alignment": "center",
+    "max_words_per_line": 7,
+    "margin_left": 540,
+    "margin_right": 540,
+    "margin_vertical": 864,
+    "position": {
+      "x": 540,
+      "y": 864
+    },
+    "safe_area": {
+      "top": 120,
+      "bottom": 160,
+      "left": 80,
+      "right": 80
+    },
+    "stroke": {
+      "enabled": false,
+      "width_px": 0,
+      "color": "#000000",
+      "opacity": 0.0
+    },
+    "shadow": {
+      "enabled": false,
+      "opacity": 0.0,
+      "blur_px": 0.0,
+      "offset_x": 0.0,
+      "offset_y": 0.0,
+      "color": "#000000"
+    },
+    "glow": {
+      "enabled": false,
+      "blur_px": 0.0,
+      "opacity": 0.0,
+      "color": "#F2F2F2"
+    },
+    "animation": {
+      "type": "none",
+      "duration_ms": 0,
+      "easing": "linear",
+      "intensity": 0.0
+    }
+  },
+  "color": {
+    "exposure": 0,
+    "contrast": 0,
+    "saturation": 0,
+    "temperature": 0,
+    "tint": 0
+  },
+  "audio": {
+    "noise_reduction": false,
+    "eq": false,
+    "compression": false,
+    "loudness_target_lufs": -14
+  },
+  "motion": {
+    "default_transition": "none",
+    "default_easing": "linear",
+    "default_zoom_strength": 0
+  }
+}

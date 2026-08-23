@@ -1,0 +1,52 @@
+{
+  "style_id": "style_a_clean_white",
+  "version": 2,
+  "confidence": 0.9,
+  "caption": {
+    "font_family": "Arial",
+    "font_weight": 700,
+    "size_px": 56,
+    "fill": "#FFFFFF",
+    "highlight": "#FFFFFF",
+    "opacity": 1.0,
+    "letter_spacing": 0,
+    "line_height": 1.0,
+    "alignment": "center",
+    "max_words_per_line": 6,
+    "margin_left": 80,
+    "margin_right": 80,
+    "margin_vertical": 220,
+    "position": {
+      "x": 80,
+      "y": 220
+    },
+    "safe_area": {
+      "top": 120,
+      "bottom": 160,
+      "left": 80,
+      "right": 80
+    },
+    "stroke": {
+      "enabled": false
+    },
+    "shadow": {
+      "enabled": false
+    },
+    "glow": {
+      "enabled": false
+    },
+    "animation": {
+      "type": "none",
+      "duration_ms": 0,
+      "easing": "linear",
+      "intensity": 0.0
+    },
+    "word_styles": {
+      "emphasis": {
+        "fill": "#00FF00",
+        "scale": 1.4,
+        "font_weight": 900
+      }
+    }
+  }
+}

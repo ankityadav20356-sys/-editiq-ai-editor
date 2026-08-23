@@ -1,0 +1,60 @@
+{
+  "style_id": "style_b_bold_bottom",
+  "version": 2,
+  "confidence": 0.85,
+  "caption": {
+    "font_family": "Impact",
+    "font_weight": 900,
+    "size_px": 72,
+    "fill": "#111111",
+    "highlight": "#111111",
+    "opacity": 1.0,
+    "letter_spacing": 1.5,
+    "line_height": 1.1,
+    "alignment": "left",
+    "max_words_per_line": 4,
+    "margin_left": 60,
+    "margin_right": 60,
+    "margin_vertical": 1500,
+    "position": {
+      "x": 60,
+      "y": 1500
+    },
+    "safe_area": {
+      "top": 120,
+      "bottom": 160,
+      "left": 60,
+      "right": 60
+    },
+    "stroke": {
+      "enabled": true,
+      "width_px": 3,
+      "color": "#FFFFFF",
+      "opacity": 1.0
+    },
+    "shadow": {
+      "enabled": false
+    },
+    "glow": {
+      "enabled": false
+    },
+    "animation": {
+      "type": "pop",
+      "duration_ms": 180,
+      "easing": "ease_out",
+      "intensity": 0.9
+    },
+    "word_styles": {
+      "keyword": {
+        "fill": "#FFFF00",
+        "font_weight": 900
+      }
+    },
+    "phrase_styles": {
+      "call_to_action": {
+        "fill": "#FF3366",
+        "scale": 1.1
+      }
+    }
+  }
+}

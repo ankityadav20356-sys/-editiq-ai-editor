@@ -128,6 +128,20 @@ def load_caption_style(style):
         "animation": caption.get(
             "animation",
             {}
+        ),
+        # SUPPORTED NOW: word_styles are read and rendered per-word below
+        # (fill / scale / font_weight). Any "animation" nested inside a
+        # word_style is schema-ready but not yet applied per-word.
+        "word_styles": caption.get(
+            "word_styles",
+            {}
+        ),
+        # SCHEMA-READY BUT NOT YET RENDERED: phrase_styles is intentionally
+        # not consumed by the renderer yet. It is carried through here only
+        # so future code has one obvious place to start reading it from.
+        "phrase_styles": caption.get(
+            "phrase_styles",
+            {}
         )
     }
 
@@ -284,6 +298,44 @@ def word_override_color(color):
     )
 
 
+def base_bold_flag(caption):
+    """-1 (bold on) or 0 (bold off), matching the [V4+ Styles] Bold field."""
+    return -1 if caption["font_weight"] >= 600 else 0
+
+
+def named_word_style_tags(word_style, caption):
+    """
+    Build the ASS inline override block for a *named* word_style
+    (word.style -> caption.word_styles[name]).
+
+    SUPPORTED NOW: fill, scale, font_weight.
+    NOT rendered here: word_style.animation (schema-ready only).
+    """
+    tags = []
+
+    if "fill" in word_style:
+        tags.append(
+            "\\c" + hex_to_ass_color(word_style["fill"], 0)
+        )
+
+    if "scale" in word_style:
+        percent = int(round(word_style["scale"] * 100))
+        tags.append(f"\\fscx{percent}\\fscy{percent}")
+
+    if "font_weight" in word_style:
+        bold = 1 if word_style["font_weight"] >= 600 else 0
+        tags.append(f"\\b{bold}")
+
+    return "".join(tags)
+
+
+def reset_tags(caption):
+    """Inline override block that restores the base (non-highlighted) look."""
+    base_bold = base_bold_flag(caption)
+    bold_tag = f"\\b{1 if base_bold == -1 else 0}"
+    return word_override_color(caption["fill"]) + "\\fscx100\\fscy100" + bold_tag
+
+
 def build_word_text(words, style):
     caption = load_caption_style(style)
 
@@ -294,6 +346,8 @@ def build_word_text(words, style):
     highlight_color = word_override_color(
         caption["highlight"]
     )
+
+    word_styles = caption["word_styles"]
 
     rendered = []
 
@@ -308,6 +362,26 @@ def build_word_text(words, style):
         if not text:
             continue
 
+        style_name = word.get("style")
+
+        if style_name and style_name in word_styles:
+            # NEW: named word-level style override (word/phrase-level
+            # styling foundation). Falls through to the legacy boolean
+            # path below only if the name isn't found, so a typo'd
+            # style name degrades gracefully instead of crashing.
+            open_tags = named_word_style_tags(
+                word_styles[style_name],
+                caption
+            )
+
+            rendered.append(
+                "{" + open_tags + "}"
+                + text
+                + "{" + reset_tags(caption) + "}"
+            )
+
+            continue
+
         highlighted = bool(
             word.get(
                 "highlight",
@@ -316,6 +390,9 @@ def build_word_text(words, style):
         )
 
         if highlighted:
+            # LEGACY behavior, unchanged: boolean highlight swaps to the
+            # caption's single "highlight" color. Kept exactly as before
+            # so pre-existing profiles/captions keep working.
             rendered.append(
                 "{"
                 + highlight_color

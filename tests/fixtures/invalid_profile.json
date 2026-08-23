@@ -1,0 +1,9 @@
+{
+  "style_id": "broken",
+  "version": 2,
+  "confidence": 1.4,
+  "caption": {
+    "fill": "not-a-hex-color",
+    "unexpected_field": true
+  }
+}
