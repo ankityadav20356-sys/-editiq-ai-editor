@@ -11,8 +11,8 @@ def load_json(path):
         return json.load(file)
 
 
-def hex_to_ass_color(color):
-    color = color.lstrip("#")
+def hex_to_ass_color(color, alpha=0):
+    color = str(color or "#FFFFFF").lstrip("#")
 
     if len(color) != 6:
         color = "FFFFFF"
@@ -21,10 +21,14 @@ def hex_to_ass_color(color):
     g = color[2:4]
     b = color[4:6]
 
-    return f"&H00{b}{g}{r}"
+    alpha = max(0, min(255, int(alpha)))
+
+    return f"&H{alpha:02X}{b}{g}{r}"
 
 
 def seconds_to_ass(seconds):
+    seconds = max(0, float(seconds))
+
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     remaining = seconds % 60
@@ -32,62 +36,205 @@ def seconds_to_ass(seconds):
     return f"{hours}:{minutes:02d}:{remaining:05.2f}"
 
 
-def get_caption_style(style):
+def alignment_to_ass(alignment):
+    mapping = {
+        "left": 4,
+        "center": 5,
+        "right": 6
+    }
+
+    return mapping.get(
+        str(alignment).lower(),
+        5
+    )
+
+
+def load_caption_style(style):
     caption = style.get("caption", {})
 
     return {
-        "font": caption.get("font_family", "Arial"),
-        "size": caption.get("size_px", 56),
-        "weight": caption.get("font_weight", 700),
-        "fill": caption.get("fill", "#FFFFFF"),
-        "highlight": caption.get("highlight", "#FFFFFF"),
-        "opacity": caption.get("opacity", 100),
-        "spacing": caption.get("letter_spacing", 0),
-        "alignment": caption.get("alignment", 5),
-        "margin_left": caption.get("margin_left", 80),
-        "margin_right": caption.get("margin_right", 80),
-        "margin_vertical": caption.get("margin_vertical", 80),
-        "stroke": caption.get("stroke", {}),
-        "shadow": caption.get("shadow", {}),
-        "glow": caption.get("glow", {}),
+        "font_family": caption.get(
+            "font_family",
+            "Arial"
+        ),
+        "font_weight": caption.get(
+            "font_weight",
+            700
+        ),
+        "size_px": caption.get(
+            "size_px",
+            56
+        ),
+        "fill": caption.get(
+            "fill",
+            "#FFFFFF"
+        ),
+        "highlight": caption.get(
+            "highlight",
+            "#FFFFFF"
+        ),
+        "opacity": caption.get(
+            "opacity",
+            1
+        ),
+        "letter_spacing": caption.get(
+            "letter_spacing",
+            0
+        ),
+        "line_height": caption.get(
+            "line_height",
+            1.0
+        ),
+        "alignment": caption.get(
+            "alignment",
+            "center"
+        ),
+        "max_words_per_line": caption.get(
+            "max_words_per_line",
+            7
+        ),
+        "margin_left": caption.get(
+            "margin_left",
+            80
+        ),
+        "margin_right": caption.get(
+            "margin_right",
+            80
+        ),
+        "margin_vertical": caption.get(
+            "margin_vertical",
+            120
+        ),
+        "position": caption.get(
+            "position",
+            {}
+        ),
+        "safe_area": caption.get(
+            "safe_area",
+            {}
+        ),
+        "stroke": caption.get(
+            "stroke",
+            {}
+        ),
+        "shadow": caption.get(
+            "shadow",
+            {}
+        ),
+        "glow": caption.get(
+            "glow",
+            {}
+        ),
+        "animation": caption.get(
+            "animation",
+            {}
+        )
     }
 
 
-def create_ass_style(style):
-    caption = get_caption_style(style)
+def create_ass_header(style):
+    caption = load_caption_style(style)
 
-    font = caption["font"]
-    size = caption["size"]
-    weight = caption["weight"]
+    font = caption["font_family"]
+    size = caption["size_px"]
+    weight = caption["font_weight"]
 
-    fill = hex_to_ass_color(caption["fill"])
-    highlight = hex_to_ass_color(caption["highlight"])
+    opacity = caption["opacity"]
+
+    alpha = int(
+        (1 - max(0, min(1, opacity))) * 255
+    )
+
+    primary = hex_to_ass_color(
+        caption["fill"],
+        alpha
+    )
+
+    highlight = hex_to_ass_color(
+        caption["highlight"],
+        alpha
+    )
 
     stroke = caption["stroke"]
-    shadow = caption["shadow"]
 
-    stroke_enabled = stroke.get("enabled", False)
-    shadow_enabled = shadow.get("enabled", False)
+    stroke_enabled = stroke.get(
+        "enabled",
+        False
+    )
 
-    outline = (
-        stroke.get("width", 0)
+    stroke_width = (
+        stroke.get("width_px", 0)
         if stroke_enabled
         else 0
     )
 
+    stroke_color = hex_to_ass_color(
+        stroke.get(
+            "color",
+            "#000000"
+        ),
+        int(
+            (
+                1 -
+                stroke.get(
+                    "opacity",
+                    1
+                )
+            ) * 255
+        )
+    )
+
+    shadow = caption["shadow"]
+
+    shadow_enabled = shadow.get(
+        "enabled",
+        False
+    )
+
     shadow_size = (
-        shadow.get("size", 2)
+        max(
+            abs(
+                shadow.get(
+                    "offset_x",
+                    0
+                )
+            ),
+            abs(
+                shadow.get(
+                    "offset_y",
+                    0
+                )
+            )
+        )
         if shadow_enabled
         else 0
     )
 
+    alignment = alignment_to_ass(
+        caption["alignment"]
+    )
+
+    position = caption["position"]
+
+    margin_left = int(
+        position.get(
+            "x",
+            caption["margin_left"]
+        )
+    )
+
+    margin_right = int(
+        caption["margin_right"]
+    )
+
+    margin_vertical = int(
+        position.get(
+            "y",
+            caption["margin_vertical"]
+        )
+    )
+
     bold = -1 if weight >= 600 else 0
-
-    alignment = caption["alignment"]
-
-    margin_left = caption["margin_left"]
-    margin_right = caption["margin_right"]
-    margin_vertical = caption["margin_vertical"]
 
     return f"""[Script Info]
 ScriptType: v4.00+
@@ -97,7 +244,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: EditIQ,{font},{size},{fill},{highlight},&H00000000,&H80000000,{bold},0,0,0,100,100,{caption["spacing"]},0,1,{outline},{shadow_size},{alignment},{margin_left},{margin_right},{margin_vertical},1
+Style: EditIQ,{font},{size},{primary},{highlight},{stroke_color},&H80000000,{bold},0,0,0,100,100,{caption["letter_spacing"]},0,1,{stroke_width},{shadow_size},{alignment},{margin_left},{margin_right},{margin_vertical},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -105,84 +252,141 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 def escape_ass_text(text):
-    text = text.replace("\\", r"\\")
-    text = text.replace("{", r"\{")
-    text = text.replace("}", r"\}")
-    text = text.replace("\n", r"\N")
+    text = str(text)
+
+    text = text.replace(
+        "\\",
+        r"\\"
+    )
+
+    text = text.replace(
+        "{",
+        r"\{"
+    )
+
+    text = text.replace(
+        "}",
+        r"\}"
+    )
+
+    text = text.replace(
+        "\n",
+        r"\N"
+    )
 
     return text
+
+
+def word_override_color(color):
+    return "\\c" + hex_to_ass_color(
+        color,
+        0
+    )
+
+
+def build_word_text(words, style):
+    caption = load_caption_style(style)
+
+    normal_color = word_override_color(
+        caption["fill"]
+    )
+
+    highlight_color = word_override_color(
+        caption["highlight"]
+    )
+
+    rendered = []
+
+    for word in words:
+        text = escape_ass_text(
+            word.get(
+                "text",
+                ""
+            )
+        )
+
+        if not text:
+            continue
+
+        highlighted = bool(
+            word.get(
+                "highlight",
+                False
+            )
+        )
+
+        if highlighted:
+            rendered.append(
+                "{"
+                + highlight_color
+                + "}"
+                + text
+                + "{"
+                + normal_color
+                + "}"
+            )
+        else:
+            rendered.append(
+                text
+            )
+
+    return " ".join(rendered)
 
 
 def build_events(captions, style):
     events = []
 
-    caption_style = get_caption_style(style)
-
-    primary_color = hex_to_ass_color(
-        caption_style["fill"]
-    )
-
-    highlight_color = hex_to_ass_color(
-        caption_style["highlight"]
-    )
-
     for caption in captions:
 
-        start = seconds_to_ass(
-            float(caption["start"])
+        start = float(
+            caption.get(
+                "start",
+                0
+            )
         )
 
-        end = seconds_to_ass(
-            float(caption["end"])
+        end = float(
+            caption.get(
+                "end",
+                start
+            )
         )
 
-        text = caption.get(
-            "text",
-            ""
-        ).strip()
+        if end <= start:
+            continue
+
+        words = caption.get(
+            "words"
+        )
+
+        if isinstance(
+            words,
+            list
+        ) and words:
+
+            text = build_word_text(
+                words,
+                style
+            )
+
+        else:
+
+            text = escape_ass_text(
+                caption.get(
+                    "text",
+                    ""
+                ).strip()
+            )
 
         if not text:
             continue
 
-        words = caption.get("words")
-
-        if words:
-            rendered_words = []
-
-            for word in words:
-
-                word_text = escape_ass_text(
-                    str(word.get("text", ""))
-                )
-
-                highlighted = word.get(
-                    "highlight",
-                    False
-                )
-
-                if highlighted:
-                    rendered_words.append(
-                        "{\\c" +
-                        highlight_color +
-                        "}" +
-                        word_text +
-                        "{\\c" +
-                        primary_color +
-                        "}"
-                    )
-                else:
-                    rendered_words.append(
-                        word_text
-                    )
-
-            text = " ".join(rendered_words)
-
-        else:
-            text = escape_ass_text(text)
-
         events.append(
             "Dialogue: "
-            f"0,{start},{end},EditIQ,"
+            f"0,"
+            f"{seconds_to_ass(start)},"
+            f"{seconds_to_ass(end)},"
+            "EditIQ,"
             ",0,0,0,,"
             f"{text}"
         )
@@ -196,17 +400,19 @@ def create_ass_file(
     output_path
 ):
 
-    ass_content = create_ass_style(
+    content = create_ass_header(
         style_profile
     )
 
-    ass_content += build_events(
+    content += build_events(
         captions,
         style_profile
     )
 
-    Path(output_path).write_text(
-        ass_content,
+    Path(
+        output_path
+    ).write_text(
+        content,
         encoding="utf-8"
     )
 
@@ -218,7 +424,9 @@ def render_video(
     captions_path
 ):
 
-    if not os.path.isfile(input_video):
+    if not os.path.isfile(
+        input_video
+    ):
         raise FileNotFoundError(
             input_video
         )
@@ -238,7 +446,10 @@ def render_video(
 
     with tempfile.TemporaryDirectory() as temp:
 
-        ass_path = Path(temp) / "captions.ass"
+        ass_path = (
+            Path(temp)
+            / "captions.ass"
+        )
 
         create_ass_file(
             style_profile,
@@ -272,7 +483,10 @@ def render_video(
 def main():
 
     parser = argparse.ArgumentParser(
-        description="EditIQ deterministic caption renderer"
+        description=(
+            "EditIQ deterministic "
+            "caption renderer V2"
+        )
     )
 
     parser.add_argument(
