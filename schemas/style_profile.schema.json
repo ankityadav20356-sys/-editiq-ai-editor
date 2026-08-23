@@ -36,6 +36,17 @@
     },
     "motion": {
       "$ref": "#/$defs/motion"
+    },
+    "word_detections": {
+      "description": "Raw word-level evidence collected from the reference video by analyzer/word_level_analyzer.py. Kept separate from caption.word_styles: this is per-detection evidence (text/timing/observed signals), not a reusable renderer style.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/word_detection"
+      }
+    },
+    "word_analysis": {
+      "description": "Metadata about whether word-level OCR analysis was attempted/succeeded, so consumers can tell an intentional global-only fallback apart from a bug.",
+      "$ref": "#/$defs/word_analysis"
     }
   },
   "$defs": {
@@ -348,6 +359,96 @@
         "default_zoom_strength": {
           "type": "number",
           "minimum": 0
+        }
+      }
+    },
+    "word_detection": {
+      "description": "A single tracked word as observed in the reference video. Raw evidence only, not a renderer-facing style.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "start",
+        "end",
+        "confidence"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fill": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "height_px": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "ink_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "relative_scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "relative_weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "emphasis_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "animation_hint": {
+          "type": "string"
+        },
+        "style_name": {
+          "type": "string"
+        }
+      }
+    },
+    "word_analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempted",
+        "success"
+      ],
+      "properties": {
+        "attempted": {
+          "type": "boolean"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
         }
       }
     }
