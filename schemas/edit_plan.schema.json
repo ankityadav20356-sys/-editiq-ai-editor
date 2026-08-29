@@ -51,6 +51,25 @@
     },
     "broll": {
       "$ref": "#/$defs/broll"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transcript_segment"
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/operation"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
     }
   },
   "$defs": {
@@ -239,6 +258,258 @@
         },
         "reason": {
           "type": "string"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "media",
+        "duration"
+      ],
+      "properties": {
+        "media": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "transcript_word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number"
+        }
+      }
+    },
+    "transcript_segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transcript_word"
+          }
+        }
+      }
+    },
+    "op_cut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "type": {
+          "const": "cut"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "op_caption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start",
+        "end",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "const": "caption"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "word_level_timing": {
+          "type": "boolean"
+        }
+      }
+    },
+    "op_emphasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start",
+        "end",
+        "word"
+      ],
+      "properties": {
+        "type": {
+          "const": "emphasis"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "word": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "op_zoom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "type": {
+          "const": "zoom"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 1,
+          "maximum": 3
+        }
+      }
+    },
+    "op_broll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start",
+        "end",
+        "query"
+      ],
+      "properties": {
+        "type": {
+          "const": "broll"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "op_transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "at",
+        "style"
+      ],
+      "properties": {
+        "type": {
+          "const": "transition"
+        },
+        "at": {
+          "type": "number",
+          "minimum": 0
+        },
+        "style": {
+          "type": "string"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "cut",
+            "caption",
+            "emphasis",
+            "zoom",
+            "broll",
+            "transition"
+          ]
         }
       }
     }
